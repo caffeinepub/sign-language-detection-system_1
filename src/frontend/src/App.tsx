@@ -565,12 +565,12 @@ function ContactPage() {
 
   const team = [
     {
-      name: "Alex Johnson",
-      role: "Project Lead · ML Engineer",
-      initials: "AJ",
+      name: "Nandhana Jayaraj",
+      role: "Project Lead",
+      initials: "NJ",
     },
-    { name: "Priya Sharma", role: "Frontend Developer", initials: "PS" },
-    { name: "Marco Lee", role: "Computer Vision Researcher", initials: "ML" },
+    { name: "Nivedya Prasad", role: "Team Member", initials: "NP" },
+    { name: "Sreyaswini TP", role: "Team Member", initials: "ST" },
   ];
 
   return (
@@ -768,12 +768,12 @@ function ContactPage() {
               </h3>
               <div className="flex flex-col gap-3">
                 <a
-                  href="mailto:signlang.project@example.com"
+                  href="mailto:nandhanajayaraj31@gmail.com"
                   className="flex items-center gap-3 text-sm text-muted-foreground hover:text-primary transition-colors"
                   data-ocid="contact.link"
                 >
                   <Mail className="w-4 h-4 shrink-0" />
-                  signlang.project@example.com
+                  nandhanajayaraj31@gmail.com
                 </a>
                 <Separator />
                 <a
