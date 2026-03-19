@@ -682,9 +682,18 @@ function PricingPage() {
         <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-4 leading-tight">
           Choose Your Plan
         </h1>
-        <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-          Start free, upgrade when you need more power. Every plan includes
-          real-time sign language detection.
+        <p className="text-muted-foreground text-lg max-w-2xl mx-auto mb-3">
+          Sign Language Detection System follows a{" "}
+          <span className="text-primary font-semibold">freemium model</span> —
+          basic features are available for free, while advanced features are
+          unlocked through the Premium plan.
+        </p>
+        <p className="text-muted-foreground text-base max-w-2xl mx-auto">
+          The Premium plan is available at just{" "}
+          <span className="text-primary font-semibold">₹99 per month</span>,
+          making it affordable for students and general users. This pricing
+          helps maintain the website, improve the AI model, and support future
+          development.
         </p>
       </motion.div>
 
@@ -1061,9 +1070,7 @@ export default function App() {
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   // Premium state
-  const [isPremium, setIsPremium] = useState(
-    () => localStorage.getItem("sld-premium") === "true",
-  );
+  const [isPremium, _setIsPremium] = useState(false);
 
   // Voice recognition state
   const [isListening, setIsListening] = useState(false);
@@ -1081,9 +1088,7 @@ export default function App() {
   const lastAddedRef = useRef<string>("");
 
   const unlockPremium = () => {
-    setIsPremium(true);
-    localStorage.setItem("sld-premium", "true");
-    toast.success("Premium unlocked! Enjoy more gestures.");
+    setCurrentPage("pricing");
   };
 
   const startListening = () => {
