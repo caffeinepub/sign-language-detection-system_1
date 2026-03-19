@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Camera,
   CameraOff,
+  Check,
   CheckCircle,
   Github,
   Hand,
@@ -37,7 +38,7 @@ import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Page = "home" | "detector" | "contact";
+type Page = "home" | "detector" | "contact" | "pricing";
 type Keypoint = [number, number, number];
 type HandPose = { landmarks: Keypoint[] };
 
@@ -357,6 +358,7 @@ const NAV_TABS: { id: Page; label: string }[] = [
   { id: "home", label: "Home" },
   { id: "detector", label: "Detector" },
   { id: "contact", label: "Contact" },
+  { id: "pricing", label: "Pricing" },
 ];
 
 // ─── Home Page ────────────────────────────────────────────────────────────────
@@ -585,6 +587,204 @@ function HomePage({ onGetStarted }: { onGetStarted: () => void }) {
           Open Detector
         </Button>
       </motion.section>
+    </div>
+  );
+}
+
+// ─── Pricing Page ─────────────────────────────────────────────────────────────
+
+function PricingPage() {
+  const plans = [
+    {
+      id: "free",
+      name: "Free",
+      price: "₹0",
+      period: "",
+      tagline: "Basic sign detection, limited usage",
+      badge: null,
+      features: [
+        "A–Z detection (limited)",
+        "5 detections / day",
+        "Basic gestures",
+        "Community support",
+      ],
+      cta: "Get Started Free",
+      highlight: false,
+    },
+    {
+      id: "premium",
+      name: "Premium",
+      price: "₹99",
+      period: "/ month",
+      tagline: "Unlimited detection, faster AI, voice output",
+      badge: "Most Popular",
+      features: [
+        "Unlimited detection",
+        "Voice output",
+        "Premium gestures (22+)",
+        "Faster AI processing",
+        "Email support",
+      ],
+      cta: "Choose Plan",
+      highlight: true,
+    },
+    {
+      id: "institutional",
+      name: "Institutional",
+      price: "₹999",
+      period: "/ year",
+      tagline: "For schools & colleges",
+      badge: null,
+      features: [
+        "Everything in Premium",
+        "Up to 50 users",
+        "Admin dashboard",
+        "Priority support",
+        "Usage analytics",
+      ],
+      cta: "Choose Plan",
+      highlight: false,
+    },
+    {
+      id: "professional",
+      name: "Professional",
+      price: "₹1,999",
+      period: "/ year",
+      tagline: "For organizations & companies",
+      badge: null,
+      features: [
+        "Everything in Institutional",
+        "Unlimited users",
+        "API access",
+        "Dedicated support",
+        "Custom integration",
+      ],
+      cta: "Choose Plan",
+      highlight: false,
+    },
+  ];
+
+  return (
+    <div className="max-w-6xl mx-auto px-6 py-12">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="text-center mb-14"
+      >
+        <Badge
+          variant="outline"
+          className="mb-4 px-4 py-1.5 text-xs font-semibold tracking-widest uppercase border-primary/40 text-primary"
+        >
+          Pricing
+        </Badge>
+        <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-4 leading-tight">
+          Choose Your Plan
+        </h1>
+        <p className="text-muted-foreground text-lg max-w-xl mx-auto">
+          Start free, upgrade when you need more power. Every plan includes
+          real-time sign language detection.
+        </p>
+      </motion.div>
+
+      {/* Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 items-stretch">
+        {plans.map((plan, i) => (
+          <motion.div
+            key={plan.id}
+            data-ocid={`pricing.item.${i + 1}`}
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: i * 0.1 }}
+            className="flex"
+          >
+            <Card
+              className={[
+                "flex flex-col w-full relative overflow-hidden transition-shadow duration-300",
+                plan.highlight
+                  ? "border-primary shadow-lg shadow-primary/20 ring-2 ring-primary/50 scale-[1.02]"
+                  : "border-border hover:shadow-md hover:shadow-primary/10",
+              ].join(" ")}
+            >
+              {plan.badge && (
+                <div className="absolute top-0 left-0 right-0 flex justify-center -mt-px">
+                  <span className="bg-primary text-primary-foreground text-xs font-bold px-6 py-1 rounded-b-full tracking-wide">
+                    {plan.badge}
+                  </span>
+                </div>
+              )}
+
+              <CardContent
+                className={[
+                  "flex flex-col h-full p-6",
+                  plan.badge ? "pt-8" : "",
+                ].join(" ")}
+              >
+                {/* Plan name & tagline */}
+                <div className="mb-5">
+                  <h2 className="text-xl font-bold text-foreground mb-1">
+                    {plan.name}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {plan.tagline}
+                  </p>
+                </div>
+
+                {/* Price */}
+                <div className="flex items-end gap-1 mb-6">
+                  <span
+                    className={[
+                      "text-4xl font-extrabold",
+                      plan.highlight ? "text-primary" : "text-foreground",
+                    ].join(" ")}
+                  >
+                    {plan.price}
+                  </span>
+                  {plan.period && (
+                    <span className="text-sm text-muted-foreground mb-1">
+                      {plan.period}
+                    </span>
+                  )}
+                </div>
+
+                {/* Features */}
+                <ul className="flex flex-col gap-2.5 mb-8 flex-1">
+                  {plan.features.map((feat) => (
+                    <li
+                      key={feat}
+                      className="flex items-start gap-2.5 text-sm text-foreground/90"
+                    >
+                      <Check className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
+                      {feat}
+                    </li>
+                  ))}
+                </ul>
+
+                {/* CTA */}
+                <Button
+                  data-ocid={`pricing.${plan.id}.primary_button`}
+                  variant={plan.highlight ? "default" : "outline"}
+                  className="w-full font-semibold"
+                >
+                  {plan.cta}
+                </Button>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Footer note */}
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.6 }}
+        className="text-center text-sm text-muted-foreground mt-10"
+      >
+        All plans include browser-based inference — no server required. Prices
+        in Indian Rupees (₹).
+      </motion.p>
     </div>
   );
 }
@@ -1788,7 +1988,7 @@ export default function App() {
                             data-ocid="premium.primary_button"
                           >
                             <Star className="w-3.5 h-3.5 mr-1.5 fill-white" />
-                            Unlock Premium (Demo)
+                            Unlock Premium — ₹99/month
                           </Button>
                         </div>
                       </div>
@@ -1808,6 +2008,18 @@ export default function App() {
               transition={{ duration: 0.3 }}
             >
               <ContactPage />
+            </motion.div>
+          )}
+
+          {currentPage === "pricing" && (
+            <motion.div
+              key="pricing"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.3 }}
+            >
+              <PricingPage />
             </motion.div>
           )}
         </AnimatePresence>
