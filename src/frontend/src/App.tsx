@@ -17,13 +17,18 @@ import {
   History,
   Info,
   Loader2,
+  Lock,
   Mail,
   MessageSquare,
+  Mic,
+  MicOff,
   Moon,
   Send,
+  Star,
   Sun,
   User,
   Users,
+  Volume2,
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -83,6 +88,31 @@ const SIGN_REFERENCE = [
   { sign: "I Love You", hint: "Thumb + index + pinky extended" },
 ];
 
+const PREMIUM_GESTURES = [
+  { sign: "1", hint: "Index finger only up" },
+  { sign: "2", hint: "Index + middle up (V)" },
+  { sign: "3", hint: "Thumb + index + middle" },
+  { sign: "4", hint: "4 fingers up, thumb tucked" },
+  { sign: "5", hint: "All 5 fingers spread out" },
+  { sign: "6", hint: "Pinky + thumb touch" },
+  { sign: "7", hint: "Ring + thumb touch" },
+  { sign: "8", hint: "Middle + thumb touch" },
+  { sign: "9", hint: "Index + thumb circle" },
+  { sign: "10", hint: "Fist with thumb, shake" },
+  { sign: "Please", hint: "Flat palm circles on chest" },
+  { sign: "Sorry", hint: "Fist circles on chest" },
+  { sign: "Help", hint: "Fist on open palm, lift up" },
+  { sign: "Good", hint: "Flat hand from chin forward" },
+  { sign: "Bad", hint: "Flat hand from chin, flip down" },
+  { sign: "More", hint: "All fingertips pinched together" },
+  { sign: "Stop", hint: "Flat hand slap on palm" },
+  { sign: "Eat", hint: "Fingers to mouth" },
+  { sign: "Drink", hint: "Curved hand to mouth" },
+  { sign: "Me", hint: "Index points to chest" },
+  { sign: "You", hint: "Index points forward" },
+  { sign: "Together", hint: "Fists together" },
+];
+
 // ─── Finger Extension Utils ───────────────────────────────────────────────────
 
 function isExtended(
@@ -94,12 +124,11 @@ function isExtended(
 }
 
 function fingerStates(landmarks: Keypoint[]) {
-  // Determine hand orientation: if wrist(0) is to the right of index MCP(5), it's likely a right hand
   const isRightHand = landmarks[0][0] < landmarks[5][0];
   const thumb = isRightHand
     ? landmarks[4][0] > landmarks[3][0]
     : landmarks[4][0] < landmarks[3][0];
-  const thumbUp = landmarks[4][1] < landmarks[2][1]; // tip above knuckle
+  const thumbUp = landmarks[4][1] < landmarks[2][1];
   const index = isExtended(landmarks, 8, 6);
   const middle = isExtended(landmarks, 12, 10);
   const ring = isExtended(landmarks, 16, 14);
@@ -113,7 +142,10 @@ function distance(a: Keypoint, b: Keypoint): number {
 
 // ─── ASL Classifier ──────────────────────────────────────────────────────────
 
-function classifyASL(landmarks: Keypoint[]): PredictionResult {
+function classifyASL(
+  landmarks: Keypoint[],
+  isPremium = false,
+): PredictionResult {
   const f = fingerStates(landmarks);
   const wrist = landmarks[0];
   const indexTip = landmarks[8];
@@ -134,6 +166,25 @@ function classifyASL(landmarks: Keypoint[]): PredictionResult {
   const thumbIndexClose = thumbIndexDist / norm < 0.35;
   const indexMiddleClose = indexMiddleDist / norm < 0.25;
 
+  // ── Premium number gestures (check first when premium is active) ──
+  if (isPremium) {
+    // Number 3: thumb + index + middle, ring + pinky curled
+    if (f.thumb && f.index && f.middle && !f.ring && !f.pinky)
+      return { letter: "3", confidence: 0.72 };
+    // Number 2: index + middle (V shape, no thumb)
+    if (!f.thumb && f.index && f.middle && !f.ring && !f.pinky)
+      return { letter: "2", confidence: 0.75 };
+    // Number 1: only index, no thumb
+    if (!f.thumb && f.index && !f.middle && !f.ring && !f.pinky)
+      return { letter: "1", confidence: 0.78 };
+    // Number 4: 4 fingers up, no thumb
+    if (!f.thumb && f.index && f.middle && f.ring && f.pinky)
+      return { letter: "4", confidence: 0.75 };
+    // Number 5: all spread including thumb
+    if (f.thumb && f.index && f.middle && f.ring && f.pinky && f.thumbUp)
+      return { letter: "5", confidence: 0.8 };
+  }
+
   // ── Common word gestures (check before letters to avoid conflicts) ──
 
   // I Love You: thumb + index + pinky up, middle + ring curled
@@ -147,7 +198,7 @@ function classifyASL(landmarks: Keypoint[]): PredictionResult {
   if (allExtended && f.thumb && !f.thumbUp)
     return { letter: "Thank You", confidence: 0.85 };
 
-  // Yes: closed fist (S shape) with thumb resting on side — nodding motion
+  // Yes: closed fist (S shape) with thumb resting on side
   if (allCurled && f.thumb && !f.thumbUp && !thumbIndexClose)
     return { letter: "Yes", confidence: 0.8 };
 
@@ -659,7 +710,7 @@ function ContactPage() {
                     <Label htmlFor="contact-message">Message</Label>
                     <Textarea
                       id="contact-message"
-                      placeholder="Write your message here..."
+                      placeholder="Your message..."
                       rows={5}
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
@@ -690,12 +741,12 @@ function ContactPage() {
           </Card>
         </motion.div>
 
-        {/* Info Column */}
+        {/* Side Info */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.15 }}
-          className="flex flex-col gap-6"
+          className="flex flex-col gap-4"
         >
           {/* Project Info */}
           <Card className="border-border">
@@ -809,6 +860,17 @@ export default function App() {
   const [statusMsg, setStatusMsg] = useState('Click "Start Camera" to begin');
   const [cameraError, setCameraError] = useState<string | null>(null);
 
+  // Premium state
+  const [isPremium, setIsPremium] = useState(
+    () => localStorage.getItem("sld-premium") === "true",
+  );
+
+  // Voice recognition state
+  const [isListening, setIsListening] = useState(false);
+  const [finalTranscript, setFinalTranscript] = useState("");
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const recognitionRef = useRef<any>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -817,6 +879,53 @@ export default function App() {
   const modelRef = useRef<any>(null);
   const predictionBufferRef = useRef<string[]>([]);
   const lastAddedRef = useRef<string>("");
+
+  const unlockPremium = () => {
+    setIsPremium(true);
+    localStorage.setItem("sld-premium", "true");
+    toast.success("Premium unlocked! Enjoy more gestures.");
+  };
+
+  const startListening = () => {
+    const SR =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      toast.error("Voice recognition not supported in this browser.");
+      return;
+    }
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      let final = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal)
+          final += `${event.results[i][0].transcript} `;
+        else interim += event.results[i][0].transcript;
+      }
+      if (final) setFinalTranscript((prev) => prev + final);
+      setInterimTranscript(interim);
+    };
+    recognition.onend = () => {
+      setIsListening(false);
+      setInterimTranscript("");
+    };
+    recognition.onerror = (e: any) => {
+      toast.error(`Voice error: ${e.error}`);
+      setIsListening(false);
+    };
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  };
+
+  const stopListening = () => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem("sld-theme");
@@ -928,7 +1037,7 @@ export default function App() {
         if (predictions.length > 0 && ctx) {
           const hand = predictions[0];
           drawHand(ctx, hand.landmarks, "#22c7d6");
-          const result = classifyASL(hand.landmarks);
+          const result = classifyASL(hand.landmarks, isPremium);
           predictionBufferRef.current.push(result.letter);
           if (predictionBufferRef.current.length > 5) {
             predictionBufferRef.current.shift();
@@ -967,7 +1076,7 @@ export default function App() {
       running = false;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [cameraActive, modelLoaded]);
+  }, [cameraActive, modelLoaded, isPremium]);
 
   useEffect(() => {
     return () => {
@@ -980,6 +1089,15 @@ export default function App() {
     };
   }, []);
 
+  // Word count from final transcript
+  const wordCount = finalTranscript.trim()
+    ? finalTranscript.trim().split(/\s+/).length
+    : 0;
+
+  const hasSpeechRecognition = !!(
+    (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  );
+
   return (
     <div className="min-h-screen bg-background flex flex-col relative overflow-x-hidden">
       <div className="fixed inset-0 pointer-events-none bg-spotlight" />
@@ -988,21 +1106,34 @@ export default function App() {
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="max-w-screen-2xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
           {/* Logo */}
-          <div
-            className="flex items-center gap-3 shrink-0"
-            data-ocid="header.section"
-          >
-            <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
-              <Hand className="w-5 h-5 text-primary" />
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: "oklch(0.75 0.12 200)" }}
+            >
+              <Hand className="w-5 h-5 text-white" />
             </div>
-            <div className="hidden sm:block">
-              <h1 className="text-base font-semibold text-foreground leading-tight">
+            <div>
+              <h1 className="font-bold text-sm text-foreground leading-tight">
                 Sign Language Detection
               </h1>
               <p className="text-xs text-muted-foreground">
                 ASL · TensorFlow.js · Real-time
               </p>
             </div>
+            {isPremium && (
+              <Badge
+                className="ml-1 text-xs font-semibold px-2 py-0.5 flex items-center gap-1"
+                style={{
+                  background: "oklch(0.85 0.15 85 / 0.2)",
+                  color: "oklch(0.70 0.15 85)",
+                  border: "1px solid oklch(0.85 0.15 85 / 0.4)",
+                }}
+              >
+                <Star className="w-3 h-3 fill-current" />
+                Premium
+              </Badge>
+            )}
           </div>
 
           {/* Nav Tabs */}
@@ -1186,16 +1317,18 @@ export default function App() {
                 {/* Middle: Prediction Panel */}
                 <section className="lg:col-span-1 flex flex-col gap-4">
                   <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
-                    <div className="px-5 py-4 border-b border-border">
+                    <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+                      <Hand className="w-4 h-4 text-primary" />
                       <h2 className="font-semibold text-sm text-foreground">
                         Current Prediction
                       </h2>
                     </div>
-                    <div className="flex flex-col items-center justify-center px-5 py-8 gap-4">
+
+                    <div className="flex flex-col items-center justify-center gap-4 py-6 px-5">
                       <AnimatePresence mode="wait">
                         <motion.div
-                          key={currentPrediction?.letter || "idle"}
-                          initial={{ scale: 0.7, opacity: 0 }}
+                          key={currentPrediction?.letter || "empty"}
+                          initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
                           exit={{ scale: 1.1, opacity: 0 }}
                           transition={{
@@ -1249,7 +1382,7 @@ export default function App() {
                   </div>
 
                   {/* History */}
-                  <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden flex-1">
+                  <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
                     <div className="px-5 py-4 border-b border-border flex items-center gap-2">
                       <History className="w-4 h-4 text-primary" />
                       <h2 className="font-semibold text-sm text-foreground">
@@ -1270,11 +1403,11 @@ export default function App() {
                         </Button>
                       )}
                     </div>
-                    <ScrollArea className="h-[240px]">
+                    <ScrollArea className="h-[200px]">
                       <div className="px-5 py-3 space-y-2">
                         {history.length === 0 ? (
                           <div
-                            className="flex flex-col items-center justify-center py-10 gap-2"
+                            className="flex flex-col items-center justify-center py-8 gap-2"
                             data-ocid="history.empty_state"
                           >
                             <p className="text-xs text-muted-foreground">
@@ -1322,14 +1455,139 @@ export default function App() {
                       </div>
                     </ScrollArea>
                   </div>
+
+                  {/* Voice Recognition Panel */}
+                  <div
+                    className={[
+                      "rounded-2xl border bg-card shadow-card overflow-hidden transition-all",
+                      isListening
+                        ? "border-primary/60 ring-2 ring-primary/20"
+                        : "border-border",
+                    ].join(" ")}
+                    data-ocid="voice.panel"
+                  >
+                    <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-primary" />
+                      <h2 className="font-semibold text-sm text-foreground">
+                        Voice Recognition
+                      </h2>
+                      {isListening && (
+                        <span className="ml-auto flex items-center gap-1.5">
+                          <span
+                            className="w-2 h-2 rounded-full animate-pulse"
+                            style={{ background: "oklch(0.55 0.22 25)" }}
+                          />
+                          <span
+                            className="text-xs"
+                            style={{ color: "oklch(0.55 0.22 25)" }}
+                          >
+                            Listening...
+                          </span>
+                        </span>
+                      )}
+                      {!isListening && wordCount > 0 && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {wordCount} word{wordCount !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="px-5 py-4">
+                      {!hasSpeechRecognition ? (
+                        <div className="flex flex-col items-center gap-2 py-4 text-center">
+                          <MicOff className="w-8 h-8 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">
+                            Voice recognition is not supported in this browser.
+                            Try Chrome or Edge.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-3 mb-4">
+                            <button
+                              type="button"
+                              onClick={
+                                isListening ? stopListening : startListening
+                              }
+                              className={[
+                                "w-12 h-12 rounded-full flex items-center justify-center transition-all shrink-0",
+                                isListening
+                                  ? "animate-pulse ring-4 ring-offset-2 ring-offset-background"
+                                  : "hover:scale-105",
+                              ].join(" ")}
+                              style={{
+                                background: isListening
+                                  ? "oklch(0.55 0.22 25)"
+                                  : "oklch(0.55 0.20 142)",
+                              }}
+                              aria-label={
+                                isListening
+                                  ? "Stop listening"
+                                  : "Start listening"
+                              }
+                              data-ocid="voice.toggle"
+                            >
+                              {isListening ? (
+                                <MicOff className="w-5 h-5 text-white" />
+                              ) : (
+                                <Mic className="w-5 h-5 text-white" />
+                              )}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground">
+                                {isListening ? "Tap to stop" : "Tap to start"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {isListening
+                                  ? "Speak clearly in English"
+                                  : "Voice-to-text in English"}
+                              </p>
+                            </div>
+                            {(finalTranscript || interimTranscript) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="shrink-0 h-7 px-2 text-xs text-muted-foreground"
+                                onClick={() => {
+                                  setFinalTranscript("");
+                                  setInterimTranscript("");
+                                }}
+                                data-ocid="voice.secondary_button"
+                              >
+                                Clear
+                              </Button>
+                            )}
+                          </div>
+
+                          <ScrollArea className="h-[120px] rounded-xl border border-border bg-secondary/30 px-3 py-2">
+                            <p className="text-sm leading-relaxed">
+                              <span className="text-foreground">
+                                {finalTranscript}
+                              </span>
+                              {interimTranscript && (
+                                <span className="text-muted-foreground italic">
+                                  {interimTranscript}
+                                </span>
+                              )}
+                              {!finalTranscript && !interimTranscript && (
+                                <span className="text-muted-foreground/50 italic text-xs">
+                                  Transcript will appear here...
+                                </span>
+                              )}
+                            </p>
+                          </ScrollArea>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </section>
 
                 {/* Right: Reference Panel */}
                 <section
-                  className="lg:col-span-1"
+                  className="lg:col-span-1 flex flex-col gap-4"
                   data-ocid="reference.section"
                 >
-                  <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden h-full">
+                  <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
                     <div className="px-5 py-4 border-b border-border">
                       <h2 className="font-semibold text-sm text-foreground">
                         A–Z + Gestures Reference
@@ -1338,7 +1596,7 @@ export default function App() {
                         Finger position hints
                       </p>
                     </div>
-                    <ScrollArea className="h-[calc(100vh-220px)] min-h-[400px]">
+                    <ScrollArea className="h-[500px]">
                       <div className="p-4 grid grid-cols-3 gap-2">
                         {SIGN_REFERENCE.map((item, idx) => (
                           <motion.div
@@ -1377,6 +1635,164 @@ export default function App() {
                         ))}
                       </div>
                     </ScrollArea>
+                  </div>
+
+                  {/* Premium Panel */}
+                  <div
+                    className="rounded-2xl overflow-hidden"
+                    style={{
+                      border: isPremium
+                        ? "1px solid oklch(0.85 0.15 85 / 0.5)"
+                        : "1px solid oklch(var(--border))",
+                    }}
+                    data-ocid="premium.panel"
+                  >
+                    <div
+                      className="px-5 py-4 border-b flex items-center gap-2"
+                      style={{
+                        borderColor: isPremium
+                          ? "oklch(0.85 0.15 85 / 0.3)"
+                          : "oklch(var(--border))",
+                        background: isPremium
+                          ? "oklch(0.85 0.15 85 / 0.08)"
+                          : "oklch(var(--card))",
+                      }}
+                    >
+                      <Star
+                        className="w-4 h-4"
+                        style={{
+                          color: isPremium
+                            ? "oklch(0.70 0.15 85)"
+                            : "oklch(var(--muted-foreground))",
+                          fill: isPremium ? "oklch(0.70 0.15 85)" : "none",
+                        }}
+                      />
+                      <h2
+                        className="font-semibold text-sm"
+                        style={{
+                          color: isPremium
+                            ? "oklch(0.70 0.15 85)"
+                            : "oklch(var(--foreground))",
+                        }}
+                      >
+                        Premium Gestures
+                      </h2>
+                      {isPremium && (
+                        <Badge
+                          className="ml-auto text-xs"
+                          style={{
+                            background: "oklch(0.85 0.15 85 / 0.2)",
+                            color: "oklch(0.60 0.15 85)",
+                            border: "1px solid oklch(0.85 0.15 85 / 0.4)",
+                          }}
+                        >
+                          {PREMIUM_GESTURES.length} gestures
+                        </Badge>
+                      )}
+                    </div>
+
+                    {isPremium ? (
+                      <ScrollArea className="h-[280px]">
+                        <div className="p-4 grid grid-cols-3 gap-2">
+                          {PREMIUM_GESTURES.map((item, idx) => (
+                            <motion.div
+                              key={item.sign}
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: idx * 0.025 }}
+                              className={[
+                                "rounded-xl p-2.5 flex flex-col items-center gap-1 cursor-default transition-all",
+                                currentPrediction?.letter === item.sign
+                                  ? "bg-yellow-500/10"
+                                  : "hover:bg-yellow-500/5",
+                                item.sign.length > 1 ? "col-span-3" : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                              style={{
+                                border:
+                                  currentPrediction?.letter === item.sign
+                                    ? "1px solid oklch(0.85 0.15 85 / 0.7)"
+                                    : "1px solid oklch(0.85 0.15 85 / 0.25)",
+                              }}
+                              data-ocid={`premium.item.${idx + 1}`}
+                            >
+                              <span
+                                className="font-bold leading-none"
+                                style={{
+                                  fontSize:
+                                    item.sign.length > 1 ? "1.1rem" : "1.5rem",
+                                  color:
+                                    currentPrediction?.letter === item.sign
+                                      ? "oklch(0.70 0.15 85)"
+                                      : "oklch(0.75 0.12 85)",
+                                }}
+                              >
+                                {item.sign}
+                              </span>
+                              <p className="text-[9px] text-muted-foreground text-center leading-tight">
+                                {item.hint}
+                              </p>
+                            </motion.div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    ) : (
+                      <div className="relative px-5 py-6">
+                        {/* Blurred preview */}
+                        <div
+                          className="blur-sm pointer-events-none select-none grid grid-cols-3 gap-2 mb-4"
+                          aria-hidden="true"
+                        >
+                          {PREMIUM_GESTURES.slice(0, 9).map((item) => (
+                            <div
+                              key={item.sign}
+                              className="rounded-xl border border-border p-2.5 flex flex-col items-center gap-1"
+                            >
+                              <span className="font-bold text-xl text-foreground/50">
+                                {item.sign}
+                              </span>
+                              <p className="text-[9px] text-muted-foreground text-center">
+                                {item.hint}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Lock overlay */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/70 rounded-b-2xl backdrop-blur-[1px]">
+                          <div
+                            className="w-12 h-12 rounded-full flex items-center justify-center"
+                            style={{ background: "oklch(0.85 0.15 85 / 0.15)" }}
+                          >
+                            <Lock
+                              className="w-6 h-6"
+                              style={{ color: "oklch(0.70 0.15 85)" }}
+                            />
+                          </div>
+                          <div className="text-center">
+                            <p className="font-semibold text-sm text-foreground">
+                              {PREMIUM_GESTURES.length} More Gestures
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Numbers 1–10 + common phrases
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={unlockPremium}
+                            className="px-5 font-semibold"
+                            style={{
+                              background: "oklch(0.70 0.15 85)",
+                              color: "white",
+                            }}
+                            data-ocid="premium.primary_button"
+                          >
+                            <Star className="w-3.5 h-3.5 mr-1.5 fill-white" />
+                            Unlock Premium (Demo)
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </section>
               </div>
