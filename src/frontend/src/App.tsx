@@ -30,6 +30,7 @@ import {
   User,
   Users,
   Volume2,
+  VolumeX,
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -635,7 +636,7 @@ function PricingPage() {
       id: "premium",
       name: "Premium",
       price: "₹99",
-      period: "/ month",
+      period: "one-time",
       tagline: "Unlimited detection, faster AI, voice output",
       badge: "Most Popular",
       features: [
@@ -710,10 +711,9 @@ function PricingPage() {
         </p>
         <p className="text-muted-foreground text-base max-w-2xl mx-auto">
           The Premium plan is available at just{" "}
-          <span className="text-primary font-semibold">₹99 per month</span>,
-          making it affordable for students and general users. This pricing
-          helps maintain the website, improve the AI model, and support future
-          development.
+          <span className="text-primary font-semibold">₹99</span>, making it
+          affordable for students and general users. This pricing helps maintain
+          the website, improve the AI model, and support future development.
         </p>
       </motion.div>
 
@@ -1092,11 +1092,21 @@ export default function App() {
   // Premium state
   const [isPremium, _setIsPremium] = useState(false);
 
+  // Auto-speak detected signs (accessibility)
+  const [autoSpeak, setAutoSpeak] = useState(true);
+
   // Voice recognition state
   const [isListening, setIsListening] = useState(false);
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const recognitionRef = useRef<any>(null);
+
+  // Voice-to-sign state
+  const [voiceSignQueue, setVoiceSignQueue] = useState<string[]>([]);
+  const [voiceSignIndex, setVoiceSignIndex] = useState(0);
+  const [voiceSignWord, setVoiceSignWord] = useState("");
+  const [isSpellingOut, setIsSpellingOut] = useState(false);
+  const voiceSignTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1106,9 +1116,47 @@ export default function App() {
   const modelRef = useRef<any>(null);
   const predictionBufferRef = useRef<string[]>([]);
   const lastAddedRef = useRef<string>("");
+  const ttsSpokenRef = useRef<string>("");
 
   const unlockPremium = () => {
     setCurrentPage("pricing");
+  };
+
+  const showVoiceSign = (text: string) => {
+    if (!text.trim()) return;
+    if (voiceSignTimerRef.current) clearInterval(voiceSignTimerRef.current);
+    const allSigns = [...SIGN_REFERENCE, ...PREMIUM_GESTURES];
+    const word = text.trim().split(/\s+/).slice(-1)[0];
+    const normalized = word.toLowerCase();
+    const match = allSigns.find((s) => s.sign.toLowerCase() === normalized);
+    if (match) {
+      setVoiceSignWord(word);
+      setVoiceSignQueue([match.sign]);
+      setVoiceSignIndex(0);
+      setIsSpellingOut(false);
+    } else {
+      // Spell letter by letter
+      const letters = word
+        .toUpperCase()
+        .split("")
+        .filter((ch) => /[A-Z]/.test(ch));
+      if (letters.length === 0) return;
+      setVoiceSignWord(word);
+      setVoiceSignQueue(letters);
+      setVoiceSignIndex(0);
+      setIsSpellingOut(true);
+      let idx = 0;
+      voiceSignTimerRef.current = setInterval(() => {
+        idx += 1;
+        if (idx >= letters.length) {
+          clearInterval(voiceSignTimerRef.current!);
+          voiceSignTimerRef.current = null;
+          setVoiceSignIndex(letters.length - 1);
+          return;
+        }
+        setVoiceSignIndex(idx);
+      }, 1500);
+    }
   };
 
   const startListening = () => {
@@ -1131,7 +1179,10 @@ export default function App() {
           final += `${event.results[i][0].transcript} `;
         else interim += event.results[i][0].transcript;
       }
-      if (final) setFinalTranscript((prev) => prev + final);
+      if (final) {
+        setFinalTranscript((prev) => prev + final);
+        showVoiceSign(final.trim());
+      }
       setInterimTranscript(interim);
     };
     recognition.onend = () => {
@@ -1274,6 +1325,18 @@ export default function App() {
               setCurrentPrediction(result);
               if (lastAddedRef.current !== result.letter) {
                 lastAddedRef.current = result.letter;
+                // Speak the detected sign aloud for accessibility
+                if (
+                  autoSpeak &&
+                  ttsSpokenRef.current !== result.letter &&
+                  window.speechSynthesis
+                ) {
+                  ttsSpokenRef.current = result.letter;
+                  window.speechSynthesis.cancel();
+                  const utt = new SpeechSynthesisUtterance(result.letter);
+                  utt.rate = 0.9;
+                  window.speechSynthesis.speak(utt);
+                }
                 setHistory((prev) => [
                   {
                     letter: result.letter,
@@ -1301,7 +1364,7 @@ export default function App() {
       running = false;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [cameraActive, modelLoaded, isPremium]);
+  }, [cameraActive, modelLoaded, isPremium, autoSpeak]);
 
   useEffect(() => {
     return () => {
@@ -1388,15 +1451,18 @@ export default function App() {
           <button
             type="button"
             onClick={() => setIsDark((d) => !d)}
-            className="w-10 h-10 rounded-xl border border-border bg-card hover:bg-secondary transition-colors flex items-center justify-center shrink-0"
+            className="flex items-center gap-2 px-3 h-10 rounded-xl border border-border bg-card hover:bg-secondary transition-colors shrink-0"
             aria-label="Toggle theme"
             data-ocid="theme.toggle"
           >
             {isDark ? (
-              <Sun className="w-5 h-5 text-foreground" />
+              <Sun className="w-4 h-4 text-foreground" />
             ) : (
-              <Moon className="w-5 h-5 text-foreground" />
+              <Moon className="w-4 h-4 text-foreground" />
             )}
+            <span className="text-xs font-medium text-foreground hidden sm:inline">
+              {isDark ? "Light Mode" : "Dark Mode"}
+            </span>
           </button>
         </div>
       </header>
@@ -1507,11 +1573,29 @@ export default function App() {
                       </Button>
                     </div>
 
-                    <div className="px-5 pb-4">
+                    <div className="px-5 pb-2 flex items-center justify-between">
                       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                         <Info className="w-3.5 h-3.5 shrink-0" />
                         {statusMsg}
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => setAutoSpeak((v) => !v)}
+                        className={[
+                          "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all",
+                          autoSpeak
+                            ? "border-primary/60 text-primary bg-primary/10"
+                            : "border-border text-muted-foreground hover:border-primary/40",
+                        ].join(" ")}
+                        title="Toggle auto-speak for detected signs"
+                      >
+                        {autoSpeak ? (
+                          <Volume2 className="w-3.5 h-3.5" />
+                        ) : (
+                          <VolumeX className="w-3.5 h-3.5" />
+                        )}
+                        {autoSpeak ? "Speaking On" : "Speaking Off"}
+                      </button>
                     </div>
                   </div>
 
@@ -1807,6 +1891,138 @@ export default function App() {
                   </div>
                 </section>
 
+                {/* Voice-to-Sign Panel */}
+                <AnimatePresence>
+                  {voiceSignQueue.length > 0 && (
+                    <motion.div
+                      key="voice-sign-panel"
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 16 }}
+                      transition={{ duration: 0.35, ease: "easeOut" }}
+                      className="rounded-2xl border border-primary/50 bg-card shadow-card overflow-hidden"
+                      data-ocid="voice_sign.panel"
+                    >
+                      <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+                        <Hand className="w-4 h-4 text-primary" />
+                        <h2 className="font-semibold text-sm text-foreground">
+                          Voice → Sign
+                        </h2>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          "{voiceSignWord}"
+                        </span>
+                        {isSpellingOut && (
+                          <span className="ml-auto text-xs text-muted-foreground">
+                            Letter {voiceSignIndex + 1} of{" "}
+                            {voiceSignQueue.length}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (voiceSignTimerRef.current)
+                              clearInterval(voiceSignTimerRef.current);
+                            setVoiceSignQueue([]);
+                            setVoiceSignWord("");
+                            setIsSpellingOut(false);
+                          }}
+                          className="ml-auto text-muted-foreground hover:text-foreground text-xs px-2 py-0.5 rounded hover:bg-muted transition-colors"
+                          data-ocid="voice_sign.close_button"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="p-5 flex flex-col items-center gap-4">
+                        <AnimatePresence mode="wait">
+                          {voiceSignQueue[voiceSignIndex] &&
+                            (() => {
+                              const allSigns = [
+                                ...SIGN_REFERENCE,
+                                ...PREMIUM_GESTURES,
+                              ];
+                              const signData = allSigns.find(
+                                (s) =>
+                                  s.sign === voiceSignQueue[voiceSignIndex],
+                              );
+                              return (
+                                <motion.div
+                                  key={`${voiceSignQueue[voiceSignIndex]}-${voiceSignIndex}`}
+                                  initial={{ opacity: 0, scale: 0.8 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.8 }}
+                                  transition={{
+                                    duration: 0.3,
+                                    ease: "backOut",
+                                  }}
+                                  className="flex flex-col items-center gap-3 w-full"
+                                >
+                                  <div
+                                    className="w-32 h-32 rounded-2xl flex items-center justify-center"
+                                    style={{
+                                      background: "oklch(0.75 0.12 200 / 0.15)",
+                                      border:
+                                        "2px solid oklch(0.75 0.12 200 / 0.4)",
+                                    }}
+                                  >
+                                    <span
+                                      className="font-bold leading-none select-none"
+                                      style={{
+                                        fontSize:
+                                          voiceSignQueue[voiceSignIndex]
+                                            .length > 3
+                                            ? "1.8rem"
+                                            : "3.5rem",
+                                        color: "oklch(0.75 0.12 200)",
+                                      }}
+                                    >
+                                      {voiceSignQueue[voiceSignIndex]}
+                                    </span>
+                                  </div>
+                                  {signData && (
+                                    <p className="text-xs text-muted-foreground text-center max-w-[180px]">
+                                      {signData.hint}
+                                    </p>
+                                  )}
+                                  {isSpellingOut &&
+                                    voiceSignQueue.length > 1 && (
+                                      <div className="flex gap-1.5 flex-wrap justify-center mt-1">
+                                        {voiceSignQueue.map(
+                                          (letter, letterIdx) => {
+                                            const dotKey = `pos-${letterIdx}`;
+                                            return (
+                                              <span
+                                                key={dotKey}
+                                                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all"
+                                                style={{
+                                                  background:
+                                                    letterIdx === voiceSignIndex
+                                                      ? "oklch(0.75 0.12 200)"
+                                                      : letterIdx <
+                                                          voiceSignIndex
+                                                        ? "oklch(0.75 0.12 200 / 0.3)"
+                                                        : "oklch(var(--muted))",
+                                                  color:
+                                                    letterIdx === voiceSignIndex
+                                                      ? "white"
+                                                      : "oklch(var(--muted-foreground))",
+                                                }}
+                                              >
+                                                {letter}
+                                              </span>
+                                            );
+                                          },
+                                        )}
+                                      </div>
+                                    )}
+                                </motion.div>
+                              );
+                            })()}
+                        </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 {/* Right: Reference Panel */}
                 <section
                   className="lg:col-span-1 flex flex-col gap-4"
@@ -2013,7 +2229,7 @@ export default function App() {
                             data-ocid="premium.primary_button"
                           >
                             <Star className="w-3.5 h-3.5 mr-1.5 fill-white" />
-                            Unlock Premium — ₹99/month
+                            Unlock Premium — ₹99
                           </Button>
                         </div>
                       </div>
@@ -2059,17 +2275,6 @@ export default function App() {
             <span className="text-border">·</span>
             <span>Student Mini Project</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()}.{" "}
-            <a
-              href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-primary transition-colors"
-            >
-              Built with ♥ using caffeine.ai
-            </a>
-          </p>
         </div>
       </footer>
 
